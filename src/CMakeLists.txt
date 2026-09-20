@@ -102,9 +102,16 @@ if(NOT PLATFORM_WINDOWS)
     add_subdirectory(demos/demo_app)
     add_subdirectory(demos/plot_stuff)
     add_subdirectory(main_application)
+    # third_party/LumosConfig submodule now checked out; qt_application builds
+    # for the Phase 0 audit of the prior Qt migration attempt.
     add_subdirectory(qt_application)
+    # Fresh Qt migration attempt (Phase 1: framework-independent core only for now).
+    add_subdirectory(new_qt_application)
     add_subdirectory(applications/module_application)
-    add_subdirectory(applications/text_rendering/glfw)
+    # Temporarily disabled: requires a locally-vendored (gitignored, undocumented)
+    # GLFW checkout at this path that isn't present on this machine. See conversation
+    # with Claude on 2026-09-17 for details. Not needed to build the `duoplot` target.
+    # add_subdirectory(applications/text_rendering/glfw)
 endif()
 add_subdirectory(system_test)
 add_subdirectory(test)

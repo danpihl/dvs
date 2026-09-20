@@ -549,7 +549,7 @@ DUOPLOT_WEAK bool duoplot_internal_isDuoplotRunning()
         {
             continue;
         }
-        else if (!duoplot_internal_isSubstringInString("duoplotplot", path) ||
+        else if (!duoplot_internal_isSubstringInString("duoplot", path) ||
                  duoplot_internal_isSubstringInString("grep", path))
         {
             continue;
