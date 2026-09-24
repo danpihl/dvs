@@ -1,101 +1,51 @@
 #ifndef MAIN_APPLICATION_PROJECT_STATE_CONFIGURATION_AGENT_H_
 #define MAIN_APPLICATION_PROJECT_STATE_CONFIGURATION_AGENT_H_
 
-#include <unistd.h>
-
-#include <fstream>
-#include <iomanip>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 
-#include "lumos/logging.h"
-#include "filesystem.h"
-
-struct AppPreferences
-{
-    std::string last_opened_file;
-    bool open_main_window_on_start;
-};
-
+// Persists the handful of app-level (not per-project) settings duoplot
+// remembers across launches, at a fixed OS-specific path
+// (~/Library/Preferences/duoplot/configuration.json on macOS).
+//
+// Typed accessors, not a generic key/value store: this used to be
+// `template <typename T> T readValue(const std::string& key)` /
+// `writeValue<T>(key, val)`, requiring every caller to know both the exact
+// JSON key string and its type. With exactly one consumer (MainWindow) and
+// two known settings, that bought nothing but footguns — a typo'd key or a
+// mismatched T were both only-at-runtime failures — and cost a redundant
+// hasKey()+readValue() double file-read per access. See
+// ARCHITECTURE_IMPROVEMENTS.md #8. Add a new pair of typed accessors here,
+// same shape as the two below, if a new setting is ever needed — the
+// underlying JSON is a plain object, so this doesn't require a schema
+// migration.
 class ConfigurationAgent
 {
 public:
-    ~ConfigurationAgent();
     ConfigurationAgent();
 
     bool isValid() const;
-    bool hasKey(const std::string& key);
 
-    template <typename T> T readValue(const std::string& key)
-    {
-        if (is_valid_)
-        {
-            nlohmann::json json_data;
-            T data;
-            try
-            {
-                json_data = readConfigurationFile();
-            }
-            catch (const std::exception& e)
-            {
-                is_valid_ = false;
-                LUMOS_LOG_ERROR() << "Error reading configuration file \"" << configuration_file_path_
-                                << "\"! Returning empty value.";
-                return data;
-            }
+    // std::nullopt if never set (or the agent is invalid) — no dead-end
+    // ambiguity between "not set" and "set to an empty string" the way a
+    // bare readValue<std::string>() had.
+    std::optional<std::string> getLastOpenedFile() const;
+    void setLastOpenedFile(const std::string& path);
 
-            try
-            {
-                data = json_data[key].get<T>();
-            }
-            catch (const std::exception& e)
-            {
-                LUMOS_LOG_ERROR() << "Error reading value for key " << key << "! Returning empty value.";
-            }
-            return data;
-        }
-        else
-        {
-            LUMOS_LOG_ERROR() << "Tried calling ConfigurationAgent::readValue(" << key
-                            << ") for invalid ConfigurationAgent!";
-            T data = 0;
-            return data;
-        }
-    }
-
-    template <typename T> void writeValue(const std::string& key, const T& val)
-    {
-        if (is_valid_)
-        {
-            nlohmann::json json_data = readConfigurationFile();
-            json_data[key] = val;
-
-            try
-            {
-                writeToConfigurationFile(json_data);
-            }
-            catch (const std::exception& e)
-            {
-                LUMOS_LOG_ERROR() << "Failed to overwrite configuration.json at \"" << configuration_file_path_
-                                << "\". Exception: " << e.what() << ". Exiting.";
-                is_valid_ = false;
-                return;
-            }
-        }
-        else
-        {
-            LUMOS_LOG_ERROR() << "Tried calling ConfigurationAgent::writeValue(" << key
-                            << ") for invalid ConfigurationAgent!";
-        }
-    }
+    // Owns its own default (10) and valid range (1-100) — previously
+    // duplicated at the one call site that read this
+    // (MainWindow::getVisualizationPeriodMs()).
+    int getVisualizationPeriodMs() const;
+    void setVisualizationPeriodMs(int visualization_period_ms);
 
 private:
-    nlohmann::json readConfigurationFile() const;
-    void createEmptyConfigurationFile() const;
-    void writeToConfigurationFile(const nlohmann::json& json_data) const;
+    void load();
+    void persist();
 
     bool is_valid_;
     std::string configuration_file_path_;
+    nlohmann::json cache_;
 };
 
 #endif  // MAIN_APPLICATION_PROJECT_STATE_CONFIGURATION_AGENT_H_

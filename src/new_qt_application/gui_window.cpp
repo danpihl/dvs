@@ -23,25 +23,11 @@ GuiWindow::GuiWindow(
     const std::string& project_name,
     const int callback_id,
     const bool project_is_saved,
-    const std::function<void(const char key)>& notify_main_window_key_pressed,
-    const std::function<void(const char key)>& notify_main_window_key_released,
-    const std::function<std::vector<std::string>(void)>& get_all_element_names,
-    const std::function<void(const std::string&)>& notify_main_window_element_deleted,
-    const std::function<void(const std::string&, const std::string&)>& notify_main_window_element_name_changed,
-    const std::function<void(const std::string&, const std::string&)>& notify_main_window_name_changed,
-    const std::function<void()>& notify_main_window_about_modification,
-    const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window)
+    const GuiCallbacks& callbacks)
     : QMainWindow(nullptr),
       callback_id_{callback_id},
       current_tab_num_{0},
-      notify_main_window_key_pressed_{notify_main_window_key_pressed},
-      notify_main_window_key_released_{notify_main_window_key_released},
-      notify_main_window_element_deleted_{notify_main_window_element_deleted},
-      get_all_element_names_{get_all_element_names},
-      notify_main_window_element_name_changed_{notify_main_window_element_name_changed},
-      notify_main_window_name_changed_{notify_main_window_name_changed},
-      notify_main_window_about_modification_{notify_main_window_about_modification},
-      push_text_to_cmdl_output_window_{push_text_to_cmdl_output_window},
+      callbacks_{callbacks},
       main_window_{main_window},
       project_is_saved_{project_is_saved},
       laid_out_once_{false}
@@ -67,7 +53,12 @@ GuiWindow::GuiWindow(
     content_area_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     h_layout->addWidget(content_area_);
 
-    notify_parent_window_right_mouse_pressed_ = [this](const QPoint pos, const std::string& item_name) {
+    // Overwrites the field received from MainWindow (which is empty —
+    // MainWindow never participates in right-click dispatch) with a lambda
+    // wrapping this window's own mouseRightPressed(), before passing
+    // callbacks_ down to any WindowTab this window creates. See
+    // gui_callbacks.h.
+    callbacks_.right_mouse_pressed = [this](const QPoint pos, const std::string& item_name) {
         mouseRightPressed(pos, ClickSource::GUI_ELEMENT, item_name);
     };
 
@@ -84,37 +75,28 @@ GuiWindow::GuiWindow(
 
     for (const TabSettings& tab_settings : tab_settings_list)
     {
-        WindowTab* tab = new WindowTab(
-            content_area_,
-            tab_settings,
-            notify_main_window_key_pressed_,
-            notify_main_window_key_released_,
-            notify_parent_window_right_mouse_pressed_,
-            notify_main_window_element_deleted_,
-            notify_main_window_about_modification_,
-            push_text_to_cmdl_output_window_);
+        WindowTab* tab = new WindowTab(content_area_, tab_settings, callbacks_);
 
-        tabs_.push_back(tab);
         addTabButton(tab);
 
         current_tab_num_++;
     }
 
-    for (size_t i = 0; i < tabs_.size(); i++)
+    for (size_t i = 0; i < tab_entries_.size(); i++)
     {
         if (i == 0)
         {
-            tabs_[i]->show();
-            const RGBTripletf c = tabs_[i]->getBackgroundColor();
+            tab_entries_[i].tab->show();
+            const RGBTripletf c = tab_entries_[i].tab->getBackgroundColor();
             QPalette pal = content_area_->palette();
             pal.setColor(QPalette::Window, QColor::fromRgbF(c.red, c.green, c.blue));
             content_area_->setAutoFillBackground(true);
             content_area_->setPalette(pal);
-            tab_button_widgets_[i]->setChecked(true);
+            tab_entries_[i].button->setChecked(true);
         }
         else
         {
-            tabs_[i]->hide();
+            tab_entries_[i].tab->hide();
         }
     }
 
@@ -128,29 +110,29 @@ GuiWindow::GuiWindow(
     // explicitly bring every tab's elements up to date against the real
     // final size right now, on a freshly-constructed, never-yet-shown
     // window (exactly the state that bug hid in).
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        tab->updateSizeFromParent(content_area_->size());
+        entry.tab->updateSizeFromParent(content_area_->size());
     }
 
-    LUMOS_LOG_INFO() << "GuiWindow '" << name_ << "' created with " << tabs_.size() << " tabs";
+    LUMOS_LOG_INFO() << "GuiWindow '" << name_ << "' created with " << tab_entries_.size() << " tabs";
 }
 
 GuiWindow::~GuiWindow()
 {
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        delete tab;
+        delete entry.tab;
     }
 }
 
 void GuiWindow::deleteAllTabs()
 {
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        delete tab;
+        delete entry.tab;
     }
-    tabs_.clear();
+    tab_entries_.clear();
 }
 
 void GuiWindow::setProjectName(const std::string& project_name)
@@ -161,9 +143,9 @@ void GuiWindow::setProjectName(const std::string& project_name)
 std::vector<GuiElement*> GuiWindow::getGuiElements() const
 {
     std::vector<GuiElement*> elems;
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        const auto tab_elems = tab->getGuiElements();
+        const auto tab_elems = entry.tab->getGuiElements();
         elems.insert(elems.end(), tab_elems.begin(), tab_elems.end());
     }
     return elems;
@@ -172,9 +154,9 @@ std::vector<GuiElement*> GuiWindow::getGuiElements() const
 std::vector<GuiElement*> GuiWindow::getPlotPanes() const
 {
     std::vector<GuiElement*> elems;
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        const auto tab_elems = tab->getPlotPanes();
+        const auto tab_elems = entry.tab->getPlotPanes();
         elems.insert(elems.end(), tab_elems.begin(), tab_elems.end());
     }
     return elems;
@@ -183,9 +165,9 @@ std::vector<GuiElement*> GuiWindow::getPlotPanes() const
 std::vector<GuiElement*> GuiWindow::getAllGuiElements() const
 {
     std::vector<GuiElement*> elems;
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        const auto tab_elems = tab->getAllGuiElements();
+        const auto tab_elems = entry.tab->getAllGuiElements();
         elems.insert(elems.end(), tab_elems.begin(), tab_elems.end());
     }
     return elems;
@@ -193,9 +175,9 @@ std::vector<GuiElement*> GuiWindow::getAllGuiElements() const
 
 GuiElement* GuiWindow::getGuiElement(const std::string& element_handle_string) const
 {
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        GuiElement* ge = tab->getGuiElement(element_handle_string);
+        GuiElement* ge = entry.tab->getGuiElement(element_handle_string);
         if (ge != nullptr)
         {
             return ge;
@@ -230,17 +212,17 @@ void GuiWindow::notifyChildrenOnKeyPressed(const char key)
         checkModeInAllMenus("Pan");
     }
 
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        tab->notifyChildrenOnKeyPressed(key);
+        entry.tab->notifyChildrenOnKeyPressed(key);
     }
 }
 
 void GuiWindow::notifyChildrenOnKeyReleased(const char key)
 {
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        tab->notifyChildrenOnKeyReleased(key);
+        entry.tab->notifyChildrenOnKeyReleased(key);
     }
 }
 
@@ -277,23 +259,23 @@ void GuiWindow::mousePressEvent(QMouseEvent* event)
 
 void GuiWindow::tabChanged(const std::string& name)
 {
-    for (size_t i = 0; i < tabs_.size(); i++)
+    for (const auto& entry : tab_entries_)
     {
-        if (tabs_[i]->getName() == name)
+        if (entry.tab->getName() == name)
         {
-            tabs_[i]->show();
-            const RGBTripletf c = tabs_[i]->getBackgroundColor();
+            entry.tab->show();
+            const RGBTripletf c = entry.tab->getBackgroundColor();
             QPalette pal = content_area_->palette();
             pal.setColor(QPalette::Window, QColor::fromRgbF(c.red, c.green, c.blue));
             content_area_->setAutoFillBackground(true);
             content_area_->setPalette(pal);
-            tab_button_widgets_[i]->setChecked(true);
+            entry.button->setChecked(true);
             content_area_->update();
         }
         else
         {
-            tabs_[i]->hide();
-            tab_button_widgets_[i]->setChecked(false);
+            entry.tab->hide();
+            entry.button->setChecked(false);
         }
     }
 }
@@ -301,26 +283,25 @@ void GuiWindow::tabChanged(const std::string& name)
 void GuiWindow::layoutTabButtons()
 {
     // Hidden entirely with a single tab, matching wx.
-    tab_button_panel_->setVisible(tab_button_widgets_.size() > 1);
+    tab_button_panel_->setVisible(tab_entries_.size() > 1);
 
-    for (size_t k = 0; k < tab_button_widgets_.size(); k++)
+    for (size_t k = 0; k < tab_entries_.size(); k++)
     {
-        tab_button_widgets_[k]->setGeometry(0, static_cast<int>(k) * 30, 70, 30);
+        tab_entries_[k].button->setGeometry(0, static_cast<int>(k) * 30, 70, 30);
         // A newly created child only inherits visibility from the
         // hidden->visible transition of its parent at the moment that
         // transition happens — a button added *after* tab_button_panel_ is
         // already visible (i.e. every tab from the 3rd onward) needs an
         // explicit show(), exactly like MainWindow::layoutWindowButtons()
         // already does for its own per-window buttons.
-        tab_button_widgets_[k]->show();
+        tab_entries_[k].button->show();
     }
 }
 
 void GuiWindow::addTabButton(WindowTab* tab)
 {
-    // Captures `tab` (a stable pointer) rather than an index into tabs_/
-    // tab_button_widgets_ — an index would go stale for every button after
-    // one that gets removed by deleteTab().
+    // Captures `tab` (a stable pointer), not an index — see the TabEntry
+    // comment in gui_window.h/ARCHITECTURE_IMPROVEMENTS.md #1.
     QPushButton* btn = new QPushButton(QString::fromStdString(tab->getName()), tab_button_panel_);
     btn->setCheckable(true);
     connect(btn, &QPushButton::clicked, this, [this, tab]() { tabChanged(tab->getName()); });
@@ -330,13 +311,13 @@ void GuiWindow::addTabButton(WindowTab* tab)
         mouseRightPressed(btn->mapTo(tab_button_panel_, local_pos), ClickSource::TAB_BUTTON, tab->getName());
     });
 
-    tab_button_widgets_.push_back(btn);
+    tab_entries_.push_back(TabEntry{tab, btn});
 }
 
 void GuiWindow::moveEvent(QMoveEvent* event)
 {
     QMainWindow::moveEvent(event);
-    notify_main_window_about_modification_();
+    callbacks_.about_modification();
 }
 
 void GuiWindow::resizeEvent(QResizeEvent* event)
@@ -349,12 +330,12 @@ void GuiWindow::resizeEvent(QResizeEvent* event)
     // tab is kept in sync on every resize, not only the currently-visible
     // one — a hidden tab must already have correct geometry the moment it's
     // switched to, not get it lazily on switchToTab.
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        tab->updateSizeFromParent(content_area_->size());
+        entry.tab->updateSizeFromParent(content_area_->size());
     }
 
-    notify_main_window_about_modification_();
+    callbacks_.about_modification();
 }
 
 void GuiWindow::showEvent(QShowEvent* event)
@@ -379,16 +360,16 @@ void GuiWindow::showEvent(QShowEvent* event)
     {
         laid_out_once_ = true;
         layoutTabButtons();
-        for (const auto& tab : tabs_)
+        for (const auto& entry : tab_entries_)
         {
-            tab->updateSizeFromParent(content_area_->size());
+            entry.tab->updateSizeFromParent(content_area_->size());
         }
     }
 }
 
 void GuiWindow::closeEvent(QCloseEvent* event)
 {
-    notify_main_window_about_modification_();
+    callbacks_.about_modification();
     hide();
     event->ignore();
 }
@@ -425,7 +406,7 @@ void GuiWindow::updateLabel()
 
 void GuiWindow::setName(const std::string& new_name)
 {
-    notify_main_window_name_changed_(name_, new_name);
+    callbacks_.name_changed(name_, new_name);
     name_ = new_name;
     updateLabel();
 }
@@ -439,9 +420,9 @@ WindowSettings GuiWindow::getWindowSettings() const
     ws.width = width();
     ws.height = height();
 
-    for (const auto& t : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        ws.tabs.push_back(t->getTabSettings());
+        ws.tabs.push_back(entry.tab->getTabSettings());
     }
 
     return ws;
@@ -460,34 +441,37 @@ void GuiWindow::setIsFileSavedForLabel(const bool is_saved)
 
 void GuiWindow::createNewPlotPane()
 {
-    if (!tabs_.empty())
+    if (!tab_entries_.empty())
     {
-        tabs_[current_tab_num_ < static_cast<int>(tabs_.size()) ? current_tab_num_ : 0]->createNewPlotPane();
+        const size_t idx = current_tab_num_ < static_cast<int>(tab_entries_.size())
+                               ? static_cast<size_t>(current_tab_num_)
+                               : 0;
+        tab_entries_[idx].tab->createNewPlotPane();
     }
 }
 
 void GuiWindow::createNewPlotPane(const std::string& handle_string)
 {
-    if (!tabs_.empty())
+    if (!tab_entries_.empty())
     {
-        tabs_[0]->createNewPlotPane(handle_string);
+        tab_entries_[0].tab->createNewPlotPane(handle_string);
     }
 }
 
 void GuiWindow::updateAllElements()
 {
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        tab->updateAllElements();
+        entry.tab->updateAllElements();
     }
 }
 
 std::vector<std::string> GuiWindow::getElementNames() const
 {
     std::vector<std::string> names;
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        const auto tab_names = tab->getElementNames();
+        const auto tab_names = entry.tab->getElementNames();
         names.insert(names.end(), tab_names.begin(), tab_names.end());
     }
     return names;
@@ -500,14 +484,14 @@ std::vector<std::string> GuiWindow::getElementNames() const
 
 WindowTab* GuiWindow::getSelectedTab() const
 {
-    for (size_t i = 0; i < tabs_.size(); i++)
+    for (const auto& entry : tab_entries_)
     {
-        if (i < tab_button_widgets_.size() && tab_button_widgets_[i]->isChecked())
+        if (entry.button->isChecked())
         {
-            return tabs_[i];
+            return entry.tab;
         }
     }
-    return tabs_.empty() ? nullptr : tabs_[0];
+    return tab_entries_.empty() ? nullptr : tab_entries_[0].tab;
 }
 
 QAction* GuiWindow::getMenuActionByText(QMenu* menu, const std::string& text) const
@@ -551,9 +535,9 @@ void GuiWindow::setMouseInteractionModeForAllTabs(const std::string& mode)
         mit = MouseInteractionType::POINT_SELECTION;
     }
 
-    for (const auto& t : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        t->setMouseInteractionType(mit);
+        entry.tab->setMouseInteractionType(mit);
     }
 }
 
@@ -704,7 +688,7 @@ std::map<std::string, std::string> GuiWindow::getValidNewElementHandleString(
             continue;
         }
 
-        const std::vector<std::string> all_element_names = get_all_element_names_();
+        const std::vector<std::string> all_element_names = callbacks_.get_all_element_names();
         const bool element_exists =
             std::find(all_element_names.begin(), all_element_names.end(), element_handle_string) !=
             all_element_names.end();
@@ -727,16 +711,16 @@ std::map<std::string, std::string> GuiWindow::getValidNewElementHandleString(
 
 std::shared_ptr<ElementSettings> GuiWindow::findElementSettings(const std::string& handle_string) const
 {
-    for (const auto& tab : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        for (GuiElement* ge : tab->getGuiElements())
+        for (GuiElement* ge : entry.tab->getGuiElements())
         {
             if (ge->getHandleString() == handle_string)
             {
                 return ge->getElementSettings();
             }
         }
-        for (GuiElement* pp : tab->getPlotPanes())
+        for (GuiElement* pp : entry.tab->getPlotPanes())
         {
             if (pp->getHandleString() == handle_string)
             {
@@ -758,7 +742,7 @@ void GuiWindow::editWindowName()
     }
 
     setName(new_name.toStdString());
-    notify_main_window_about_modification_();
+    callbacks_.about_modification();
 }
 
 void GuiWindow::newTab()
@@ -767,16 +751,12 @@ void GuiWindow::newTab()
     tab_settings.name = "Tab " + std::to_string(current_tab_num_);
     current_tab_num_++;
 
-    WindowTab* tab = new WindowTab(content_area_, tab_settings, notify_main_window_key_pressed_,
-                                   notify_main_window_key_released_, notify_parent_window_right_mouse_pressed_,
-                                   notify_main_window_element_deleted_, notify_main_window_about_modification_,
-                                   push_text_to_cmdl_output_window_);
+    WindowTab* tab = new WindowTab(content_area_, tab_settings, callbacks_);
     tab->hide();
-    tabs_.push_back(tab);
     addTabButton(tab);
 
     layoutTabButtons();
-    notify_main_window_about_modification_();
+    callbacks_.about_modification();
 }
 
 void GuiWindow::editTabName()
@@ -790,54 +770,45 @@ void GuiWindow::editTabName()
         return;
     }
 
-    const auto q = std::find_if(tabs_.begin(), tabs_.end(),
-                                 [this](const WindowTab* t) { return last_clicked_item_ == t->getName(); });
-    if (q == tabs_.end())
+    const auto q = std::find_if(tab_entries_.begin(), tab_entries_.end(),
+                                 [this](const TabEntry& entry) { return last_clicked_item_ == entry.tab->getName(); });
+    if (q == tab_entries_.end())
     {
         return;
     }
 
-    const size_t idx = static_cast<size_t>(std::distance(tabs_.begin(), q));
-    (*q)->setName(new_name.toStdString());
-    if (idx < tab_button_widgets_.size())
-    {
-        tab_button_widgets_[idx]->setText(new_name);
-    }
-    notify_main_window_about_modification_();
+    q->tab->setName(new_name.toStdString());
+    q->button->setText(new_name);
+    callbacks_.about_modification();
 }
 
 void GuiWindow::deleteTab()
 {
-    const auto q = std::find_if(tabs_.begin(), tabs_.end(),
-                                 [this](const WindowTab* t) { return last_clicked_item_ == t->getName(); });
-    if (q == tabs_.end())
+    const auto q = std::find_if(tab_entries_.begin(), tab_entries_.end(),
+                                 [this](const TabEntry& entry) { return last_clicked_item_ == entry.tab->getName(); });
+    if (q == tab_entries_.end())
     {
         return;
     }
 
-    const size_t idx = static_cast<size_t>(std::distance(tabs_.begin(), q));
     // wx re-derives which tab should become visible from its TabButtons'
     // own internal selection bookkeeping after the delete; here it's
     // simpler and equivalent to check *before* deleting whether the tab
-    // being removed was the visible one, and fall back to tabs_[0] if so.
-    const bool was_selected = idx < tab_button_widgets_.size() && tab_button_widgets_[idx]->isChecked();
+    // being removed was the visible one, and fall back to tab_entries_[0]
+    // if so.
+    const bool was_selected = q->button->isChecked();
 
-    delete *q;
-    tabs_.erase(q);
+    delete q->tab;
+    q->button->deleteLater();
+    tab_entries_.erase(q);
 
-    if (idx < tab_button_widgets_.size())
+    if (!tab_entries_.empty() && was_selected)
     {
-        tab_button_widgets_[idx]->deleteLater();
-        tab_button_widgets_.erase(tab_button_widgets_.begin() + static_cast<long>(idx));
-    }
-
-    if (!tabs_.empty() && was_selected)
-    {
-        tabChanged(tabs_[0]->getName());
+        tabChanged(tab_entries_[0].tab->getName());
     }
 
     layoutTabButtons();
-    notify_main_window_about_modification_();
+    callbacks_.about_modification();
 }
 
 void GuiWindow::createNewPlotPaneCallback()
@@ -862,7 +833,7 @@ void GuiWindow::createNewPlotPaneCallback()
         pp_settings->title = ret_fields.at("title");
 
         tab->createNewPlotPane(pp_settings);
-        notify_main_window_about_modification_();
+        callbacks_.about_modification();
     }
 }
 
@@ -888,7 +859,7 @@ void GuiWindow::createNewButtonCallback()
         elem_settings->label = ret_fields.at("label");
 
         tab->createNewButton(elem_settings);
-        notify_main_window_about_modification_();
+        callbacks_.about_modification();
     }
 }
 
@@ -919,7 +890,7 @@ void GuiWindow::createNewSliderCallback()
         elem_settings->init_value = elem_settings->min_value;
 
         tab->createNewSlider(elem_settings);
-        notify_main_window_about_modification_();
+        callbacks_.about_modification();
     }
 }
 
@@ -945,7 +916,7 @@ void GuiWindow::createNewCheckboxCallback()
         elem_settings->label = ret_fields.at("label");
 
         tab->createNewCheckbox(elem_settings);
-        notify_main_window_about_modification_();
+        callbacks_.about_modification();
     }
 }
 
@@ -971,7 +942,7 @@ void GuiWindow::createNewTextLabelCallback()
         elem_settings->label = ret_fields.at("label");
 
         tab->createNewTextLabel(elem_settings);
-        notify_main_window_about_modification_();
+        callbacks_.about_modification();
     }
 }
 
@@ -1048,7 +1019,7 @@ void GuiWindow::editElementName()
 
         if (!name_ok)
         {
-            const std::vector<std::string> all_element_names = get_all_element_names_();
+            const std::vector<std::string> all_element_names = callbacks_.get_all_element_names();
             const bool element_exists =
                 std::find(all_element_names.begin(), all_element_names.end(), element_handle_string) !=
                 all_element_names.end();
@@ -1074,56 +1045,56 @@ void GuiWindow::editElementName()
     }
 
     bool name_changed = false;
-    for (const auto& t : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        name_changed = t->changeNameOfElementIfElementExists(last_clicked_item_, ret_fields) || name_changed;
+        name_changed = entry.tab->changeNameOfElementIfElementExists(last_clicked_item_, ret_fields) || name_changed;
     }
 
     if (name_changed)
     {
-        notify_main_window_element_name_changed_(last_clicked_item_, ret_fields["handle_string"]);
+        callbacks_.element_name_changed(last_clicked_item_, ret_fields["handle_string"]);
     }
 }
 
 void GuiWindow::deleteElementAction()
 {
     bool element_deleted = false;
-    for (const auto& t : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        element_deleted = t->deleteElementIfItExists(last_clicked_item_) || element_deleted;
+        element_deleted = entry.tab->deleteElementIfItExists(last_clicked_item_) || element_deleted;
     }
 
     if (element_deleted)
     {
-        notify_main_window_about_modification_();
+        callbacks_.about_modification();
     }
 }
 
 void GuiWindow::toggleProjectionModeAction()
 {
-    for (const auto& t : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        t->toggleProjectionMode(last_clicked_item_);
+        entry.tab->toggleProjectionMode(last_clicked_item_);
     }
-    notify_main_window_about_modification_();
+    callbacks_.about_modification();
 }
 
 void GuiWindow::raiseElementAction()
 {
-    for (const auto& t : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        t->raiseElement(last_clicked_item_);
+        entry.tab->raiseElement(last_clicked_item_);
     }
-    notify_main_window_about_modification_();
+    callbacks_.about_modification();
 }
 
 void GuiWindow::lowerElementAction()
 {
-    for (const auto& t : tabs_)
+    for (const auto& entry : tab_entries_)
     {
-        t->lowerElement(last_clicked_item_);
+        entry.tab->lowerElement(last_clicked_item_);
     }
-    notify_main_window_about_modification_();
+    callbacks_.about_modification();
 }
 
 void GuiWindow::printGuiCode()

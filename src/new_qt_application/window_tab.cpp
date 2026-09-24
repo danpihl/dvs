@@ -66,23 +66,10 @@ std::pair<QPoint, QSize> getPosAndSizeInPixelCoords(const QSize& current_window_
 // WindowTab
 // ---------------------------------------------------------------------------
 
-WindowTab::WindowTab(QWidget* parent_window,
-                     const TabSettings& tab_settings,
-                     const std::function<void(const char key)>& notify_main_window_key_pressed,
-                     const std::function<void(const char key)>& notify_main_window_key_released,
-                     const std::function<void(const QPoint pos, const std::string& elem_name)>&
-                         notify_parent_window_right_mouse_pressed,
-                     const std::function<void(const std::string&)>& notify_main_window_element_deleted,
-                     const std::function<void()>& notify_main_window_about_modification,
-                     const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window)
+WindowTab::WindowTab(QWidget* parent_window, const TabSettings& tab_settings, const GuiCallbacks& callbacks)
     : name_{tab_settings.name},
       parent_window_{parent_window},
-      notify_main_window_key_pressed_{notify_main_window_key_pressed},
-      notify_main_window_key_released_{notify_main_window_key_released},
-      notify_parent_window_right_mouse_pressed_{notify_parent_window_right_mouse_pressed},
-      notify_main_window_element_deleted_{notify_main_window_element_deleted},
-      notify_main_window_about_modification_{notify_main_window_about_modification},
-      push_text_to_cmdl_output_window_{push_text_to_cmdl_output_window},
+      callbacks_{callbacks},
       current_element_idx_{0}
 {
     background_color_ = tab_settings.background_color;
@@ -93,7 +80,11 @@ WindowTab::WindowTab(QWidget* parent_window,
 
     editing_silhouette_ = new EditingSilhouette(parent_window_, QPoint{0, 0}, QSize{100, 100});
 
-    notify_tab_about_editing_ = [this](const QPoint& pos, const QSize& size, const bool is_editing) -> void {
+    // Overwrites the field received from GuiWindow — this tab is the sole
+    // owner of editing_silhouette_, so it must supply its own version of
+    // this one callback before passing callbacks_ down to any element it
+    // creates. See gui_callbacks.h.
+    callbacks_.tab_about_editing = [this](const QPoint& pos, const QSize& size, const bool is_editing) -> void {
         if (is_editing)
         {
             editing_silhouette_->setPosAndSize(pos, size);
@@ -180,13 +171,13 @@ WindowTab::~WindowTab()
 {
     for (const auto& pp : plot_panes_)
     {
-        notify_main_window_element_deleted_(pp->getHandleString());
+        callbacks_.element_deleted(pp->getHandleString());
         delete pp;
     }
 
     for (const auto& elem : gui_elements_)
     {
-        notify_main_window_element_deleted_(elem->getHandleString());
+        callbacks_.element_deleted(elem->getHandleString());
         delete elem;
     }
 }
@@ -237,15 +228,7 @@ void WindowTab::createNewPlotPane()
     pp_settings->handle_string = "element-" + std::to_string(current_element_idx_);
     pp_settings->title = pp_settings->handle_string;
 
-    PlotPane* const pp = new PlotPane(parent_window_,
-                                      pp_settings,
-                                      background_color_,
-                                      notify_main_window_key_pressed_,
-                                      notify_main_window_key_released_,
-                                      notify_parent_window_right_mouse_pressed_,
-                                      notify_main_window_about_modification_,
-                                      notify_tab_about_editing_,
-                                      push_text_to_cmdl_output_window_);
+    PlotPane* const pp = new PlotPane(parent_window_, pp_settings, background_color_, callbacks_);
     pp->updateSizeFromParent(parent_window_->size());
     pp->show();
     plot_panes_.push_back(pp);
@@ -269,15 +252,7 @@ void WindowTab::createNewPlotPane(const std::string& element_handle_string)
 
 void WindowTab::createNewPlotPane(const std::shared_ptr<ElementSettings>& element_settings)
 {
-    PlotPane* const pp = new PlotPane(parent_window_,
-                                      element_settings,
-                                      background_color_,
-                                      notify_main_window_key_pressed_,
-                                      notify_main_window_key_released_,
-                                      notify_parent_window_right_mouse_pressed_,
-                                      notify_main_window_about_modification_,
-                                      notify_tab_about_editing_,
-                                      push_text_to_cmdl_output_window_);
+    PlotPane* const pp = new PlotPane(parent_window_, element_settings, background_color_, callbacks_);
     // The fix for the old qt_application's "Bug A": every element, on every
     // creation path, must have its real geometry applied immediately via
     // setElementPositionAndSize (reached through updateSizeFromParent) —
@@ -297,12 +272,7 @@ void WindowTab::createNewButton(const std::shared_ptr<ElementSettings>& elem_set
 
     ButtonGuiElement* button = new ButtonGuiElement(parent_window_,
                                                     elem_settings,
-                                                    notify_main_window_key_pressed_,
-                                                    notify_main_window_key_released_,
-                                                    notify_parent_window_right_mouse_pressed_,
-                                                    notify_main_window_about_modification_,
-                                                    notify_tab_about_editing_,
-                                                    push_text_to_cmdl_output_window_,
+                                                    callbacks_,
                                                     elem_pos,
                                                     elem_size);
     button->updateSizeFromParent(parent_window_->size());
@@ -316,12 +286,7 @@ void WindowTab::createNewSlider(const std::shared_ptr<ElementSettings>& elem_set
 
     SliderGuiElement* slider = new SliderGuiElement(parent_window_,
                                                     elem_settings,
-                                                    notify_main_window_key_pressed_,
-                                                    notify_main_window_key_released_,
-                                                    notify_parent_window_right_mouse_pressed_,
-                                                    notify_main_window_about_modification_,
-                                                    notify_tab_about_editing_,
-                                                    push_text_to_cmdl_output_window_,
+                                                    callbacks_,
                                                     elem_pos,
                                                     elem_size);
     slider->updateSizeFromParent(parent_window_->size());
@@ -335,12 +300,7 @@ void WindowTab::createNewCheckbox(const std::shared_ptr<ElementSettings>& elem_s
 
     CheckboxGuiElement* checkbox = new CheckboxGuiElement(parent_window_,
                                                           elem_settings,
-                                                          notify_main_window_key_pressed_,
-                                                          notify_main_window_key_released_,
-                                                          notify_parent_window_right_mouse_pressed_,
-                                                          notify_main_window_about_modification_,
-                                                          notify_tab_about_editing_,
-                                                          push_text_to_cmdl_output_window_,
+                                                          callbacks_,
                                                           elem_pos,
                                                           elem_size);
     checkbox->updateSizeFromParent(parent_window_->size());
@@ -354,12 +314,7 @@ void WindowTab::createNewTextLabel(const std::shared_ptr<ElementSettings>& elem_
 
     TextLabelGuiElement* label = new TextLabelGuiElement(parent_window_,
                                                          elem_settings,
-                                                         notify_main_window_key_pressed_,
-                                                         notify_main_window_key_released_,
-                                                         notify_parent_window_right_mouse_pressed_,
-                                                         notify_main_window_about_modification_,
-                                                         notify_tab_about_editing_,
-                                                         push_text_to_cmdl_output_window_,
+                                                         callbacks_,
                                                          elem_pos,
                                                          elem_size);
     label->updateSizeFromParent(parent_window_->size());
@@ -373,12 +328,7 @@ void WindowTab::createNewListBox(const std::shared_ptr<ElementSettings>& element
 
     ListBoxGuiElement* list_box = new ListBoxGuiElement(parent_window_,
                                                         element_settings,
-                                                        notify_main_window_key_pressed_,
-                                                        notify_main_window_key_released_,
-                                                        notify_parent_window_right_mouse_pressed_,
-                                                        notify_main_window_about_modification_,
-                                                        notify_tab_about_editing_,
-                                                        push_text_to_cmdl_output_window_,
+                                                        callbacks_,
                                                         elem_pos,
                                                         elem_size);
     list_box->updateSizeFromParent(parent_window_->size());
@@ -392,12 +342,7 @@ void WindowTab::createNewEditableText(const std::shared_ptr<ElementSettings>& el
 
     EditableTextGuiElement* editable_text = new EditableTextGuiElement(parent_window_,
                                                                        element_settings,
-                                                                       notify_main_window_key_pressed_,
-                                                                       notify_main_window_key_released_,
-                                                                       notify_parent_window_right_mouse_pressed_,
-                                                                       notify_main_window_about_modification_,
-                                                                       notify_tab_about_editing_,
-                                                                       push_text_to_cmdl_output_window_,
+                                                                       callbacks_,
                                                                        elem_pos,
                                                                        elem_size);
     editable_text->updateSizeFromParent(parent_window_->size());
@@ -411,12 +356,7 @@ void WindowTab::createDropdownMenu(const std::shared_ptr<ElementSettings>& eleme
 
     DropdownMenuGuiElement* dropdown = new DropdownMenuGuiElement(parent_window_,
                                                                    element_settings,
-                                                                   notify_main_window_key_pressed_,
-                                                                   notify_main_window_key_released_,
-                                                                   notify_parent_window_right_mouse_pressed_,
-                                                                   notify_main_window_about_modification_,
-                                                                   notify_tab_about_editing_,
-                                                                   push_text_to_cmdl_output_window_,
+                                                                   callbacks_,
                                                                    elem_pos,
                                                                    elem_size);
     dropdown->updateSizeFromParent(parent_window_->size());
@@ -431,12 +371,7 @@ void WindowTab::createRadioButtonGroup(const std::shared_ptr<ElementSettings>& e
     RadioButtonGroupGuiElement* radio_group =
         new RadioButtonGroupGuiElement(parent_window_,
                                        element_settings,
-                                       notify_main_window_key_pressed_,
-                                       notify_main_window_key_released_,
-                                       notify_parent_window_right_mouse_pressed_,
-                                       notify_main_window_about_modification_,
-                                       notify_tab_about_editing_,
-                                       push_text_to_cmdl_output_window_,
+                                       callbacks_,
                                        elem_pos,
                                        elem_size);
     radio_group->updateSizeFromParent(parent_window_->size());
@@ -575,7 +510,7 @@ bool WindowTab::deleteElementIfItExists(const std::string& element_handle_string
         delete (*q_pp);
         z_order_queue_.eraseElement(element_handle_string);
         plot_panes_.erase(q_pp);
-        notify_main_window_element_deleted_(element_handle_string);
+        callbacks_.element_deleted(element_handle_string);
         return true;
     }
 
@@ -588,7 +523,7 @@ bool WindowTab::deleteElementIfItExists(const std::string& element_handle_string
         delete (*q_ge);
         z_order_queue_.eraseElement(element_handle_string);
         gui_elements_.erase(q_ge);
-        notify_main_window_element_deleted_(element_handle_string);
+        callbacks_.element_deleted(element_handle_string);
         return true;
     }
 

@@ -7,22 +7,8 @@
 
 #include "lumos/plotting/internal.h"
 
-GuiElement::GuiElement(
-    const std::shared_ptr<ElementSettings>& element_settings,
-    const std::function<void(const char key)>& notify_main_window_key_pressed,
-    const std::function<void(const char key)>& notify_main_window_key_released,
-    const std::function<void(const QPoint pos, const std::string& elem_name)>&
-        notify_parent_window_right_mouse_pressed,
-    const std::function<void()>& notify_main_window_about_modification,
-    const std::function<void(const QPoint& pos, const QSize& size, const bool is_editing)>& notify_tab_about_editing,
-    const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window)
-    : element_settings_{element_settings},
-      notify_main_window_key_pressed_{notify_main_window_key_pressed},
-      notify_main_window_key_released_{notify_main_window_key_released},
-      notify_parent_window_right_mouse_pressed_{notify_parent_window_right_mouse_pressed},
-      notify_main_window_about_modification_{notify_main_window_about_modification},
-      notify_tab_about_editing_{notify_tab_about_editing},
-      push_text_to_cmdl_output_window_{push_text_to_cmdl_output_window}
+GuiElement::GuiElement(const std::shared_ptr<ElementSettings>& element_settings, const GuiCallbacks& callbacks)
+    : element_settings_{element_settings}, callbacks_{callbacks}
 {
     control_pressed_at_mouse_press_ = false;
     shift_pressed_at_mouse_press_ = false;
@@ -56,7 +42,7 @@ void GuiElement::keyPressed(const char key)
         }
         if (mouse_is_inside_)
         {
-            notify_tab_about_editing_(this->getPosition(), this->getSize(), true);
+            callbacks_.tab_about_editing(this->getPosition(), this->getSize(), true);
         }
     }
 
@@ -85,7 +71,7 @@ void GuiElement::mouseEnteredElement(QEvent* /*event*/)
 
     if (QGuiApplication::keyboardModifiers().testFlag(Qt::ControlModifier))
     {
-        notify_tab_about_editing_(this->getPosition(), this->getSize(), true);
+        callbacks_.tab_about_editing(this->getPosition(), this->getSize(), true);
         setCursorDependingOnMousePos(current_mouse_local_position);
     }
 }
@@ -93,7 +79,7 @@ void GuiElement::mouseEnteredElement(QEvent* /*event*/)
 void GuiElement::mouseLeftElement(QEvent* /*event*/)
 {
     mouse_is_inside_ = false;
-    notify_tab_about_editing_(QPoint{0, 0}, QSize{0, 0}, false);
+    callbacks_.tab_about_editing(QPoint{0, 0}, QSize{0, 0}, false);
 }
 
 void GuiElement::mouseLeftPressed(QMouseEvent* event)
@@ -126,7 +112,7 @@ void GuiElement::mouseLeftReleased(QMouseEvent* event)
         control_pressed_at_mouse_press_ = false;
         if (!QGuiApplication::keyboardModifiers().testFlag(Qt::ControlModifier))
         {
-            notify_tab_about_editing_(QPoint{0, 0}, QSize{0, 0}, false);
+            callbacks_.tab_about_editing(QPoint{0, 0}, QSize{0, 0}, false);
         }
     }
     else
@@ -145,9 +131,9 @@ void GuiElement::mouseMovedOverItem(QMouseEvent* event)
     if (control_pressed_at_mouse_press_ && (event->buttons() & Qt::LeftButton))
     {
         adjustPaneSizeOnMouseMoved();
-        notify_tab_about_editing_(this->getPosition(), this->getSize(), true);
+        callbacks_.tab_about_editing(this->getPosition(), this->getSize(), true);
 
-        notify_main_window_about_modification_();
+        callbacks_.about_modification();
     }
     else
     {
@@ -175,7 +161,7 @@ void GuiElement::mouseRightPressed(QMouseEvent* event)
     }
     else
     {
-        notify_parent_window_right_mouse_pressed_(this->getPosition() + event->pos(),
+        callbacks_.right_mouse_pressed(this->getPosition() + event->pos(),
                                                    element_settings_->handle_string);
     }
 }
@@ -318,7 +304,7 @@ void GuiElement::adjustPaneSizeOnMouseMoved()
         element_settings_->y = static_cast<float>(new_position.y()) / py;
 
         setElementPositionAndSize();
-        notify_main_window_about_modification_();
+        callbacks_.about_modification();
     }
 }
 
@@ -443,7 +429,7 @@ void GuiElement::keyPressedCallback(QKeyEvent* evt)
 {
     if (!evt->text().isEmpty())
     {
-        notify_main_window_key_pressed_(evt->text().toLatin1().at(0));
+        callbacks_.key_pressed(evt->text().toLatin1().at(0));
     }
 }
 
@@ -451,7 +437,7 @@ void GuiElement::keyReleasedCallback(QKeyEvent* evt)
 {
     if (!evt->text().isEmpty())
     {
-        notify_main_window_key_released_(evt->text().toLatin1().at(0));
+        callbacks_.key_released(evt->text().toLatin1().at(0));
     }
 }
 

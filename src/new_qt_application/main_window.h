@@ -6,28 +6,37 @@
 #include <QTimer>
 #include <QWidget>
 
-#include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
-#include <queue>
 #include <string>
-#include <thread>
 #include <vector>
 
-#include "communication/data_receiver.h"
-#include "communication/received_data.h"
+#include "gui_callbacks.h"
 #include "gui_element.h"
 #include "gui_window.h"
-#include "input_data.h"
+#include "message_router.h"
 #include "preferences_dialog.h"
+#include "project_controller.h"
 #include "project_state/configuration_agent.h"
-#include "project_state/project_settings.h"
-#include "project_state/save_manager.h"
 #include "serial_interface/serial_interface.h"
+#include "window_manager.h"
 
 // Faithful port of main_application/main_window.{h,cpp} and
-// main_window_receive.cpp's MainWindow.
+// main_window_receive.cpp's MainWindow — except its three original
+// responsibilities have since been split out into their own classes, each
+// talking back to MainWindow only through a callbacks struct or a small,
+// explicit method surface: TCP receive thread/wire-protocol dispatch into
+// MessageRouter (message_router.h, ARCHITECTURE_IMPROVEMENTS.md #4);
+// window/element lifecycle into WindowManager (window_manager.h, the other
+// half of #4); and SaveManager ownership + every project-lifecycle
+// operation (fileModified/newProject/saveProject/saveProjectAs/
+// openExistingFile) into ProjectController (project_controller.h,
+// ARCHITECTURE_IMPROVEMENTS.md #9). What's left directly in MainWindow is
+// its own widget layout (new_window_button_/preferences_button_/central_),
+// ConfigurationAgent (app-level preferences, not project state), and thin
+// delegating methods kept for API compatibility with GuiWindow's
+// popup-menu system and MessageRouterCallbacks.
 //
 // Per the audit finding in AUDIT_OF_PRIOR_ATTEMPT.md: wx's MainWindow is a
 // real, visible small control-panel window (one button per open GuiWindow,
@@ -74,71 +83,56 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 private:
-    DataReceiver data_receiver_;
     SerialInterface serial_interface_;
+
+    // App-level (not per-project) preferences — visualization_period_ms,
+    // and the last-opened-file path ProjectController reads/writes on its
+    // behalf. Kept here, not moved into ProjectController: it's also used
+    // for openPreferences()/getVisualizationPeriodMs(), which have nothing
+    // to do with project save/load.
     ConfigurationAgent* configuration_agent_;
-    SaveManager* save_manager_;
-    std::mutex receive_mtx_;
 
-    std::thread* tcp_receive_thread_;
-    std::map<std::string, GuiElement*> plot_panes_;
-    std::map<std::string, GuiElement*> gui_elements_;
+    // TCP receive thread + wire-protocol dispatch is fully extracted into
+    // MessageRouter — see ARCHITECTURE_IMPROVEMENTS.md #4. MainWindow talks
+    // to it only through MessageRouterCallbacks (constructed once, in the
+    // constructor) and message_router_->poll() (called from receive_timer_).
+    MessageRouter* message_router_;
 
-    std::map<std::string, std::queue<std::unique_ptr<InputData>>> queued_data_;
+    // Window/element lifecycle is fully extracted into WindowManager (the
+    // other half of ARCHITECTURE_IMPROVEMENTS.md #4) — every open
+    // GuiWindow, plot_panes_/gui_elements_, and the per-window toggle
+    // buttons in the control panel.
+    WindowManager* window_manager_;
+
+    // SaveManager ownership and every project-lifecycle operation
+    // (fileModified/newProject/saveProject/saveProjectAs/openExistingFile)
+    // is fully extracted into ProjectController — see
+    // ARCHITECTURE_IMPROVEMENTS.md #9. MainWindow's own methods of the same
+    // names (below) are thin delegators, kept for API compatibility with
+    // GuiWindow's popup-menu system and MessageRouterCallbacks.
+    ProjectController* project_controller_;
 
     bool shutdown_in_progress_;
 
-    std::atomic<bool> new_window_queued_;
-    std::string current_element_name_;
-
-    std::atomic<bool> open_project_file_queued_;
-    std::string queued_project_file_name_;
-
     QTimer* receive_timer_;
 
-    std::vector<GuiWindow*> windows_;
-    std::vector<QPushButton*> window_buttons_;
     QPushButton* new_window_button_;
     QPushButton* preferences_button_;
     QWidget* central_;
-    int current_window_num_;
-    int window_callback_id_;
 
-    bool window_initialization_in_progress_;
+    // Constructed once in the constructor and passed as one bundle to
+    // every GuiWindow this creates (via WindowManager) — see
+    // gui_callbacks.h and ARCHITECTURE_IMPROVEMENTS.md #2. right_mouse_pressed
+    // and tab_about_editing are left empty here: MainWindow doesn't
+    // participate in right-click dispatch or edit-mode silhouettes,
+    // GuiWindow and WindowTab fill those in themselves before passing
+    // their own copies further down.
+    GuiCallbacks callbacks_;
 
-    std::function<void(const char key)> notification_from_gui_element_key_pressed_;
-    std::function<void(const char key)> notification_from_gui_element_key_released_;
-    std::function<std::vector<std::string>(void)> get_all_element_names_;
-    std::function<void(const std::string&)> notify_main_window_element_deleted_;
-    std::function<void(const std::string&, const std::string&)> notify_main_window_element_name_changed_;
-    std::function<void(const std::string&, const std::string&)> notify_main_window_name_changed_;
-    std::function<void()> notify_main_window_about_modification_;
-    std::function<void(const Color_t, const std::string&)> push_text_to_cmdl_output_window_;
-
-    void setActiveView(const ReceivedData& received_data);
-    void receiveData();
     void handleSerialData();
-    void addActionToQueue(ReceivedData& received_data);
-    void handleGuiManipulation(ReceivedData& received_data);
-    void manageReceivedData(ReceivedData& received_data);
-    void mainWindowFlushMultipleElements(const ReceivedData& received_data);
-    void tcpReceiveThreadFunction();
 
-    bool hasWindowWithName(const std::string& window_name);
-    void windowNameChanged(const std::string& old_name, const std::string& new_name);
-
-    void performScreenshot(const std::string& screenshot_base_path);
-    void updateClientApplicationAboutGuiState() const;
-    void removeAllWindows();
-    void bootstrapDefaultProject();
-    void setupWindows(const ProjectSettings& project_settings);
-    void setIsFileSavedForAllWindows(const bool file_saved);
-    void fileModified();
     void layoutWindowButtons();
     void openPreferences();
-    int getVisualizationPeriodMs() const;
-
-    void addWindowButton(GuiWindow* gui_window);
 
 public:
     explicit MainWindow(const std::vector<std::string>& cmdl_args);

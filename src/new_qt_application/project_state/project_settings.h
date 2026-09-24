@@ -348,6 +348,19 @@ class ProjectSettings
 private:
     std::vector<WindowSettings> windows_;
 
+    // True for a default-constructed ProjectSettings and for a successful
+    // file load; false only if the file-loading constructor's JSON parse
+    // threw (see project_settings.cpp) — the original wx code (and this
+    // class's own constructor, unchanged) swallows that exception and
+    // silently leaves windows_ empty, giving callers no way to distinguish
+    // "genuinely empty project" from "failed to parse." Added for
+    // MainWindow::openExistingFile() to check before tearing down the
+    // current project for a file that turned out not to load — see
+    // ARCHITECTURE_IMPROVEMENTS.md #6. Named to match
+    // ConfigurationAgent::isValid() elsewhere in this module — both answer
+    // "did this object load correctly" for their respective class.
+    bool is_valid_ = true;
+
 public:
     ProjectSettings() = default;
     ProjectSettings(const std::string& file_path);
@@ -360,6 +373,11 @@ public:
 
     bool hasWindowWithName(const std::string& name) const;
     WindowSettings getWindowWithName(const std::string& name) const;
+
+    bool isValid() const
+    {
+        return is_valid_;
+    }
 
     bool operator==(const ProjectSettings& other) const;
     bool operator!=(const ProjectSettings& other) const;

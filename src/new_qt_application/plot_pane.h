@@ -12,6 +12,7 @@
 #include "axes/axes_renderer.h"
 #include "axes/structures/axes_settings.h"
 #include "communication/received_data.h"
+#include "gui_callbacks.h"
 #include "gui_element.h"
 #include "input_data.h"
 #include "plot_data_handler.h"
@@ -121,14 +122,7 @@ public:
     PlotPane(QWidget* parent,
              const std::shared_ptr<ElementSettings>& element_settings,
              const RGBTripletf& tab_background_color,
-             const std::function<void(const char key)>& notify_main_window_key_pressed,
-             const std::function<void(const char key)>& notify_main_window_key_released,
-             const std::function<void(const QPoint pos, const std::string& elem_name)>&
-                 notify_parent_window_right_mouse_pressed,
-             const std::function<void()>& notify_main_window_about_modification,
-             const std::function<void(const QPoint& pos, const QSize& size, const bool is_editing)>&
-                 notify_tab_about_editing,
-             const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window);
+             const GuiCallbacks& callbacks);
     ~PlotPane() override;
 
     // QWidget::show()/hide() and GuiElement::show()/hide() are both plain

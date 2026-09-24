@@ -10,6 +10,7 @@
 
 #include "color.h"
 #include "editing_silhouette.h"
+#include "gui_callbacks.h"
 #include "gui_element.h"
 #include "plot_pane.h"
 #include "project_state/project_settings.h"
@@ -50,13 +51,11 @@ private:
     std::vector<PlotPane*> plot_panes_;
     std::vector<GuiElement*> gui_elements_;
     QWidget* parent_window_;
-    std::function<void(const char key)> notify_main_window_key_pressed_;
-    std::function<void(const char key)> notify_main_window_key_released_;
-    std::function<void(const QPoint pos, const std::string& elem_name)> notify_parent_window_right_mouse_pressed_;
-    std::function<void(const QPoint& pos, const QSize& size, const bool is_editing)> notify_tab_about_editing_;
-    std::function<void(const std::string&)> notify_main_window_element_deleted_;
-    std::function<void()> notify_main_window_about_modification_;
-    std::function<void(const Color_t, const std::string&)> push_text_to_cmdl_output_window_;
+    // Copied from the constructor's `callbacks` param, then `tab_about_editing`
+    // is overwritten with a lambda tied to this tab's own editing_silhouette_
+    // before being passed down to each GuiElement/PlotPane this tab creates —
+    // see gui_callbacks.h and ARCHITECTURE_IMPROVEMENTS.md #2.
+    GuiCallbacks callbacks_;
     int current_element_idx_;
     RGBTripletf background_color_;
     RGBTripletf button_normal_color_;
@@ -68,15 +67,7 @@ private:
     EditingSilhouette* editing_silhouette_;
 
 public:
-    WindowTab(QWidget* parent_window,
-              const TabSettings& tab_settings,
-              const std::function<void(const char key)>& notify_main_window_key_pressed,
-              const std::function<void(const char key)>& notify_main_window_key_released,
-              const std::function<void(const QPoint pos, const std::string& elem_name)>&
-                  notify_parent_window_right_mouse_pressed,
-              const std::function<void(const std::string&)>& notify_main_window_element_deleted,
-              const std::function<void()>& notify_main_window_about_modification,
-              const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window);
+    WindowTab(QWidget* parent_window, const TabSettings& tab_settings, const GuiCallbacks& callbacks);
     void initializeZOrder(const TabSettings& tab_settings);
     ~WindowTab();
     std::vector<GuiElement*> getPlotPanes() const;

@@ -3,23 +3,11 @@
 ButtonGuiElement::ButtonGuiElement(
     QWidget* parent,
     const std::shared_ptr<ElementSettings>& element_settings,
-    const std::function<void(const char key)>& notify_main_window_key_pressed,
-    const std::function<void(const char key)>& notify_main_window_key_released,
-    const std::function<void(const QPoint pos, const std::string& elem_name)>&
-        notify_parent_window_right_mouse_pressed,
-    const std::function<void()>& notify_main_window_about_modification,
-    const std::function<void(const QPoint& pos, const QSize& size, const bool is_editing)>& notify_tab_about_editing,
-    const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window,
+    const GuiCallbacks& callbacks,
     const QPoint& pos,
     const QSize& size)
     : QPushButton(QString::fromStdString(std::dynamic_pointer_cast<ButtonSettings>(element_settings)->label), parent),
-      GuiElement(element_settings,
-                notify_main_window_key_pressed,
-                notify_main_window_key_released,
-                notify_parent_window_right_mouse_pressed,
-                notify_main_window_about_modification,
-                notify_tab_about_editing,
-                push_text_to_cmdl_output_window),
+      GuiElement(element_settings, callbacks),
       is_pressed_(false)
 {
     publish_to_local_ = std::dynamic_pointer_cast<ButtonSettings>(element_settings)->publish_to_local;
@@ -112,23 +100,11 @@ void ButtonGuiElement::leaveEvent(QEvent* event)
 CheckboxGuiElement::CheckboxGuiElement(
     QWidget* parent,
     const std::shared_ptr<ElementSettings>& element_settings,
-    const std::function<void(const char key)>& notify_main_window_key_pressed,
-    const std::function<void(const char key)>& notify_main_window_key_released,
-    const std::function<void(const QPoint pos, const std::string& elem_name)>&
-        notify_parent_window_right_mouse_pressed,
-    const std::function<void()>& notify_main_window_about_modification,
-    const std::function<void(const QPoint& pos, const QSize& size, const bool is_editing)>& notify_tab_about_editing,
-    const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window,
+    const GuiCallbacks& callbacks,
     const QPoint& pos,
     const QSize& size)
     : QCheckBox(QString::fromStdString(std::dynamic_pointer_cast<CheckboxSettings>(element_settings)->label), parent),
-      GuiElement(element_settings,
-                notify_main_window_key_pressed,
-                notify_main_window_key_released,
-                notify_parent_window_right_mouse_pressed,
-                notify_main_window_about_modification,
-                notify_tab_about_editing,
-                push_text_to_cmdl_output_window)
+      GuiElement(element_settings, callbacks)
 {
     move(pos);
     resize(size);
@@ -196,23 +172,11 @@ void CheckboxGuiElement::leaveEvent(QEvent* event)
 TextLabelGuiElement::TextLabelGuiElement(
     QWidget* parent,
     const std::shared_ptr<ElementSettings>& element_settings,
-    const std::function<void(const char key)>& notify_main_window_key_pressed,
-    const std::function<void(const char key)>& notify_main_window_key_released,
-    const std::function<void(const QPoint pos, const std::string& elem_name)>&
-        notify_parent_window_right_mouse_pressed,
-    const std::function<void()>& notify_main_window_about_modification,
-    const std::function<void(const QPoint& pos, const QSize& size, const bool is_editing)>& notify_tab_about_editing,
-    const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window,
+    const GuiCallbacks& callbacks,
     const QPoint& pos,
     const QSize& size)
     : QLabel(QString::fromStdString(std::dynamic_pointer_cast<TextLabelSettings>(element_settings)->label), parent),
-      GuiElement(element_settings,
-                notify_main_window_key_pressed,
-                notify_main_window_key_released,
-                notify_parent_window_right_mouse_pressed,
-                notify_main_window_about_modification,
-                notify_tab_about_editing,
-                push_text_to_cmdl_output_window)
+      GuiElement(element_settings, callbacks)
 {
     move(pos);
     resize(size);
@@ -289,23 +253,11 @@ void TextLabelGuiElement::leaveEvent(QEvent* event)
 EditableTextGuiElement::EditableTextGuiElement(
     QWidget* parent,
     const std::shared_ptr<ElementSettings>& element_settings,
-    const std::function<void(const char key)>& notify_main_window_key_pressed,
-    const std::function<void(const char key)>& notify_main_window_key_released,
-    const std::function<void(const QPoint pos, const std::string& elem_name)>&
-        notify_parent_window_right_mouse_pressed,
-    const std::function<void()>& notify_main_window_about_modification,
-    const std::function<void(const QPoint& pos, const QSize& size, const bool is_editing)>& notify_tab_about_editing,
-    const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window,
+    const GuiCallbacks& callbacks,
     const QPoint& pos,
     const QSize& size)
     : QLineEdit(parent),
-      GuiElement(element_settings,
-                notify_main_window_key_pressed,
-                notify_main_window_key_released,
-                notify_parent_window_right_mouse_pressed,
-                notify_main_window_about_modification,
-                notify_tab_about_editing,
-                push_text_to_cmdl_output_window),
+      GuiElement(element_settings, callbacks),
       // wx leaves this uninitialized; not preserving that (it's undefined
       // behavior, not a behavior to mimic).
       enter_pressed_(false)
@@ -373,23 +325,11 @@ void EditableTextGuiElement::leaveEvent(QEvent* event)
 DropdownMenuGuiElement::DropdownMenuGuiElement(
     QWidget* parent,
     const std::shared_ptr<ElementSettings>& element_settings,
-    const std::function<void(const char key)>& notify_main_window_key_pressed,
-    const std::function<void(const char key)>& notify_main_window_key_released,
-    const std::function<void(const QPoint pos, const std::string& elem_name)>&
-        notify_parent_window_right_mouse_pressed,
-    const std::function<void()>& notify_main_window_about_modification,
-    const std::function<void(const QPoint& pos, const QSize& size, const bool is_editing)>& notify_tab_about_editing,
-    const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window,
+    const GuiCallbacks& callbacks,
     const QPoint& pos,
     const QSize& size)
     : QComboBox(parent),
-      GuiElement(element_settings,
-                notify_main_window_key_pressed,
-                notify_main_window_key_released,
-                notify_parent_window_right_mouse_pressed,
-                notify_main_window_about_modification,
-                notify_tab_about_editing,
-                push_text_to_cmdl_output_window)
+      GuiElement(element_settings, callbacks)
 {
     // wxCB_READONLY equivalent: user picks from the list, cannot type a
     // custom value. QComboBox is non-editable by default.
@@ -483,23 +423,11 @@ void DropdownMenuGuiElement::leaveEvent(QEvent* event)
 ListBoxGuiElement::ListBoxGuiElement(
     QWidget* parent,
     const std::shared_ptr<ElementSettings>& element_settings,
-    const std::function<void(const char key)>& notify_main_window_key_pressed,
-    const std::function<void(const char key)>& notify_main_window_key_released,
-    const std::function<void(const QPoint pos, const std::string& elem_name)>&
-        notify_parent_window_right_mouse_pressed,
-    const std::function<void()>& notify_main_window_about_modification,
-    const std::function<void(const QPoint& pos, const QSize& size, const bool is_editing)>& notify_tab_about_editing,
-    const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window,
+    const GuiCallbacks& callbacks,
     const QPoint& pos,
     const QSize& size)
     : QListWidget(parent),
-      GuiElement(element_settings,
-                notify_main_window_key_pressed,
-                notify_main_window_key_released,
-                notify_parent_window_right_mouse_pressed,
-                notify_main_window_about_modification,
-                notify_tab_about_editing,
-                push_text_to_cmdl_output_window)
+      GuiElement(element_settings, callbacks)
 {
     setSelectionMode(QAbstractItemView::SingleSelection);
 
@@ -588,24 +516,12 @@ void ListBoxGuiElement::leaveEvent(QEvent* event)
 RadioButtonGroupGuiElement::RadioButtonGroupGuiElement(
     QWidget* parent,
     const std::shared_ptr<ElementSettings>& element_settings,
-    const std::function<void(const char key)>& notify_main_window_key_pressed,
-    const std::function<void(const char key)>& notify_main_window_key_released,
-    const std::function<void(const QPoint pos, const std::string& elem_name)>&
-        notify_parent_window_right_mouse_pressed,
-    const std::function<void()>& notify_main_window_about_modification,
-    const std::function<void(const QPoint& pos, const QSize& size, const bool is_editing)>& notify_tab_about_editing,
-    const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window,
+    const GuiCallbacks& callbacks,
     const QPoint& pos,
     const QSize& size)
     : QGroupBox(QString::fromStdString(std::dynamic_pointer_cast<RadioButtonGroupSettings>(element_settings)->label),
                parent),
-      GuiElement(element_settings,
-                notify_main_window_key_pressed,
-                notify_main_window_key_released,
-                notify_parent_window_right_mouse_pressed,
-                notify_main_window_about_modification,
-                notify_tab_about_editing,
-                push_text_to_cmdl_output_window),
+      GuiElement(element_settings, callbacks),
       selected_idx_(0)
 {
     const auto radio_group_settings = std::dynamic_pointer_cast<RadioButtonGroupSettings>(element_settings);
@@ -696,13 +612,7 @@ void RadioButtonGroupGuiElement::leaveEvent(QEvent* event)
 SliderGuiElement::SliderGuiElement(
     QWidget* parent,
     const std::shared_ptr<ElementSettings>& element_settings,
-    const std::function<void(const char key)>& notify_main_window_key_pressed,
-    const std::function<void(const char key)>& notify_main_window_key_released,
-    const std::function<void(const QPoint pos, const std::string& elem_name)>&
-        notify_parent_window_right_mouse_pressed,
-    const std::function<void()>& notify_main_window_about_modification,
-    const std::function<void(const QPoint& pos, const QSize& size, const bool is_editing)>& notify_tab_about_editing,
-    const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window,
+    const GuiCallbacks& callbacks,
     const QPoint& pos,
     const QSize& size)
     // wx quirk, preserved: the wx original always constructs its wxSlider
@@ -711,13 +621,7 @@ SliderGuiElement::SliderGuiElement(
     // class comment in gui_elements.h. Matched here with Qt::Horizontal
     // always.
     : QSlider(Qt::Horizontal, parent),
-      GuiElement(element_settings,
-                notify_main_window_key_pressed,
-                notify_main_window_key_released,
-                notify_parent_window_right_mouse_pressed,
-                notify_main_window_about_modification,
-                notify_tab_about_editing,
-                push_text_to_cmdl_output_window)
+      GuiElement(element_settings, callbacks)
 {
     const auto slider_settings = std::dynamic_pointer_cast<SliderSettings>(element_settings);
 

@@ -378,6 +378,7 @@ ProjectSettings::ProjectSettings(const std::string& file_path)
     catch (const std::exception& e)
     {
         std::cerr << "Exception thrown when reading file " << file_path << ": " << e.what() << std::endl;
+        is_valid_ = false;
     }
 }
 

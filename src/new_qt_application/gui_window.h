@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "color.h"
+#include "gui_callbacks.h"
 #include "gui_element.h"
 #include "project_state/project_settings.h"
 #include "window_tab.h"
@@ -62,11 +63,20 @@ private:
         THIS
     };
 
+    // Paired instead of two parallel vectors kept in sync by convention —
+    // see ARCHITECTURE_IMPROVEMENTS.md #1. Insertion/removal is then a
+    // single push_back/erase with no index that can go stale between the
+    // two.
+    struct TabEntry
+    {
+        WindowTab* tab;
+        QPushButton* button;
+    };
+
     QWidget* central_;
     QWidget* tab_button_panel_;
     QWidget* content_area_;
-    std::vector<QPushButton*> tab_button_widgets_;
-    std::vector<WindowTab*> tabs_;
+    std::vector<TabEntry> tab_entries_;
     int callback_id_;
     int current_tab_num_;
 
@@ -77,16 +87,11 @@ private:
     QMenu* popup_menu_element_;
     QMenu* popup_menu_tab_;
 
-    std::function<void(const char key)> notify_main_window_key_pressed_;
-    std::function<void(const char key)> notify_main_window_key_released_;
-    std::function<void(const std::string&)> notify_main_window_element_deleted_;
-    std::function<std::vector<std::string>(void)> get_all_element_names_;
-    std::function<void(const std::string&, const std::string&)> notify_main_window_element_name_changed_;
-    std::function<void(const std::string&, const std::string&)> notify_main_window_name_changed_;
-    std::function<void()> notify_main_window_about_modification_;
-    std::function<void(const Color_t, const std::string&)> push_text_to_cmdl_output_window_;
-
-    std::function<void(const QPoint pos, const std::string& elem_name)> notify_parent_window_right_mouse_pressed_;
+    // Copied from the constructor's `callbacks` param, then `right_mouse_pressed`
+    // is overwritten with a lambda wrapping this window's own
+    // mouseRightPressed() before being passed down to each WindowTab this
+    // window creates — see gui_callbacks.h and ARCHITECTURE_IMPROVEMENTS.md #2.
+    GuiCallbacks callbacks_;
 
     std::string name_;
     QWidget* main_window_;
@@ -146,14 +151,7 @@ public:
               const std::string& project_name,
               const int callback_id,
               const bool project_is_saved,
-              const std::function<void(const char key)>& notify_main_window_key_pressed,
-              const std::function<void(const char key)>& notify_main_window_key_released,
-              const std::function<std::vector<std::string>(void)>& get_all_element_names,
-              const std::function<void(const std::string&)>& notify_main_window_element_deleted,
-              const std::function<void(const std::string&, const std::string&)>& notify_main_window_element_name_changed,
-              const std::function<void(const std::string&, const std::string&)>& notify_main_window_name_changed,
-              const std::function<void()>& notify_main_window_about_modification,
-              const std::function<void(const Color_t, const std::string&)>& push_text_to_cmdl_output_window);
+              const GuiCallbacks& callbacks);
     ~GuiWindow() override;
 
     int getCallbackId() const;

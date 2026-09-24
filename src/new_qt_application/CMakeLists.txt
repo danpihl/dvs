@@ -103,6 +103,9 @@ set(CORE_SOURCE_FILES
     window_tab.cpp
     gui_window.cpp
     main_window.cpp
+    message_router.cpp
+    window_manager.cpp
+    project_controller.cpp
     settings_dialog.cpp
     preferences_dialog.cpp
 )
